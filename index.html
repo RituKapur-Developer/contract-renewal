@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial;
+      background: #f4f6f9;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+    }
+
+    .card {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+
+    input, textarea, button, select {
+      width: 100%;
+      padding: 10px;
+      margin-top: 10px;
+    }
+
+    button {
+      background: #007bff;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+
+    .green { background: #28a745; }
+    .red { background: #dc3545; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 15px;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+
+    th {
+      background: #f1f1f1;
+    }
+
+    .status-expiring { color: orange; font-weight: bold; }
+    .status-overdue { color: red; font-weight: bold; }
+    .status-ok { color: green; }
+
+  </style>
+</head>
+
+<body>
+<div class="container">
+
+  <!-- FORM -->
+  <div class="card">
+    <h2>📋 Add Contract</h2>
+
+    <input id="clientName" placeholder="Client Name">
+    <input type="date" id="renewalDate">
+    <textarea id="notes" placeholder="Notes"></textarea>
+
+    <button class="green" onclick="submitForm()">Save</button>
+    <button onclick="runReminders()">Run Reminders</button>
+
+    <div id="status"></div>
+  </div>
+
+  <!-- FILTER + TABLE -->
+  <div class="card">
+    <h2>📊 Contracts Dashboard</h2>
+
+    <select onchange="loadContracts()" id="filter">
+      <option value="ALL">All</option>
+      <option value="EXPIRING">Expiring Soon (≤30 days)</option>
+      <option value="OVERDUE">Overdue</option>
+    </select>
+
+    <table>
+      <th>Actions
+        <tr>
+          <th>Client</th>
+          <th>Renewal Date</th>
+          <th>Days Left</th>
+          <th>Status</th>
+          <th>Reminder Sent</th>
+          <th>Notes</th>
+        </tr>
+      </th>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script>
+function submitForm() {
+  const clientName = document.getElementById("clientName").value;
+  const renewalDate = document.getElementById("renewalDate").value;
+  const notes = document.getElementById("notes").value;
+
+  if (!clientName || !renewalDate) {
+    document.getElementById("status").innerText = "❌ Fill required fields";
+    return;
+  }
+
+  document.getElementById("status").innerText = "⏳ Saving...";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      document.getElementById("status").innerText = res;
+      document.getElementById("clientName").value = "";
+      document.getElementById("renewalDate").value = "";
+      document.getElementById("notes").value = "";
+      loadContracts();
+    })
+    .addContract(clientName, renewalDate, notes);
+}
+
+function loadContracts() {
+  const filter = document.getElementById("filter").value;
+
+  google.script.run
+    .withSuccessHandler(renderTable)
+    .getContracts(filter);
+}
+
+function renderTable(data) {
+  const tbody = document.getElementById("tableBody");
+  tbody.innerHTML = "";
+
+  data.forEach(row => {
+    let statusClass = "status-ok";
+    let statusText = "OK";
+
+    if (row.diffDays < 0) {
+      statusClass = "status-overdue";
+      statusText = "Overdue";
+    } else if (row.diffDays <= 30) {
+      statusClass = "status-expiring";
+      statusText = "Expiring Soon";
+    }
+
+    const tr = `
+      <tr>
+        <td>${row.clientName}</td>
+        <td>${row.renewalDate}</td>
+        <td>${row.diffDays}</td>
+        <td class="${statusClass}">${statusText}</td>
+        <td>${row.reminderSent}</td>
+        <td>${row.notes}</td>
+        <td>
+          <button onclick="editRow(${row.rowIndex}, '${row.clientName}', '${row.renewalDate}', '${row.notes}')">✏️</button>
+          <button class="red" onclick="deleteRow(${row.rowIndex})">🗑️</button>
+        </td>
+      </tr>
+    `;
+
+    tbody.innerHTML += tr;
+  });
+}
+
+// Load on page open
+window.onload = loadContracts;
+
+function editRow(rowIndex, clientName, renewalDate, notes) {
+  document.getElementById("clientName").value = clientName;
+
+  // Convert date to yyyy-mm-dd format for input
+  const date = new Date(renewalDate);
+  document.getElementById("renewalDate").value =
+    date.toISOString().split("T")[0];
+
+  document.getElementById("notes").value = notes;
+
+  // Change Save button to Update
+  const btn = document.querySelector(".green");
+  btn.innerText = "Update Contract";
+  btn.onclick = function() {
+    updateContract(rowIndex);
+  };
+}
+
+function updateContract(rowIndex) {
+  const clientName = document.getElementById("clientName").value;
+  const renewalDate = document.getElementById("renewalDate").value;
+  const notes = document.getElementById("notes").value;
+
+  document.getElementById("status").innerText = "⏳ Updating...";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      document.getElementById("status").innerText = res;
+
+      resetForm();
+      loadContracts();
+    })
+    .updateContract(rowIndex, clientName, renewalDate, notes);
+}
+
+function deleteRow(rowIndex) {
+  if (!confirm("Are you sure you want to delete this contract?")) return;
+
+  document.getElementById("status").innerText = "⏳ Deleting...";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      document.getElementById("status").innerText = res;
+      loadContracts();
+    })
+    .deleteContract(rowIndex);
+}
+
+function resetForm() {
+  document.getElementById("clientName").value = "";
+  document.getElementById("renewalDate").value = "";
+  document.getElementById("notes").value = "";
+
+  const btn = document.querySelector(".green");
+  btn.innerText = "Save Contract";
+  btn.onclick = submitForm;
+}
+</script>
+
+</body>
+</html>
