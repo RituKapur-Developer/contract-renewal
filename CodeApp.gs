@@ -3,7 +3,7 @@ function doGet() {
     .setTitle('Contract Reminder App');
 }
 function runDailyReminders() {
-  const defaultEmails = 'ritukhosla91@gmail.com, kapursandhia15@gmail.com';
+  const defaultEmails = 'user@gmail.com'; //userGmail
   sendRenewalRemindersUI(defaultEmails);
 }
 function updateContract(rowIndex, clientName, renewalDate, notes) {
@@ -90,7 +90,7 @@ function sendRenewalRemindersUI(emails) {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const data = sheet.getDataRange().getValues();
 
-  const email = emails || 'ritukhosla91@gmail.com, kapursandhia15@gmail.com';
+  const email = emails || 'user@gmail.com';
 
   const today = new Date();
   today.setHours(0,0,0,0);
